@@ -54,6 +54,11 @@ jobs:
         echo "DATE=$(date "+%Y-%m-%d %H:%M:%S")" >> $GITHUB_ENV
         echo "tag_name=$(date +%Y%m%d)" >> $GITHUB_ENV
 
+    - name: rttys update
+      run: |
+        cd openwrt/lede/package
+        git clone https://github.com/zhaojh329/rtty/tree/openwrt-package
+
     - name: Update feeds
       run: |
         [ -e files ] && mv files openwrt/files
@@ -121,8 +126,10 @@ jobs:
         allowUpdates: true
         tag: ${{ env.tag_name }}
         commit: main
-        token: ${{ secrets.RELEASES_TOKEN }}
+        token: ${{ secrets.GITHUB_TOKEN }}
         body: |
           编译使用版本:
           ${{ env.useVersionInfo }}
         artifacts: "${{ env.FIRMWARE }}/*"
+
+      
