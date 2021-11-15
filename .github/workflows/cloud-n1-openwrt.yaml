@@ -54,9 +54,9 @@ jobs:
         echo "DATE=$(date "+%Y-%m-%d %H:%M:%S")" >> $GITHUB_ENV
         echo "tag_name=$(date +%Y%m%d)" >> $GITHUB_ENV
 
-    - name: rttys update
+    - name: Rttys update
       run: |
-        cd openwrt/lede/package
+        cd openwrt/package
         git clone https://github.com/zhaojh329/rtty/tree/openwrt-package
 
     - name: Update feeds
