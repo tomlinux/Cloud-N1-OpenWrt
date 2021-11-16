@@ -23,3 +23,8 @@ cp -r package-temp/small/* package/lean/
 mv -f package-temp/lua-maxminddb package/lean/
 mv -f package-temp/luci-app-vssr package/lean/
 rm -rf package-temp
+
+# Add rtty
+git clone --depth 1 https://github.com/zhaojh329/rtty  -b openwrt-package  package-temp
+mv -f  package-temp/rtty  package/lean/
+rm -rf package-temp
