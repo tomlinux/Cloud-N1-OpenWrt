@@ -57,7 +57,7 @@ jobs:
     - name: Rttys update
       run: |
         cd openwrt/package
-        git clone https://github.com/zhaojh329/rtty/tree/openwrt-package
+        git clone --depth 1 https://github.com/zhaojh329/rtty  -b openwrt-package  openwrt-package
 
     - name: Update feeds
       run: |
