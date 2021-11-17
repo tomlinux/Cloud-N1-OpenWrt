@@ -130,6 +130,6 @@ jobs:
         body: |
           编译使用版本:
           ${{ env.useVersionInfo }}
-        artifacts: "${{ env.FIRMWARE }}/*"
+        artifacts: "${{ env.FIRMWARE }}/*.zip"
 
       
