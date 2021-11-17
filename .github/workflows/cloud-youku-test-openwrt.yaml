@@ -1,0 +1,163 @@
+name: Cloud YOUKU  TEST OpenWrt
+
+on:
+  workflow_dispatch:
+    inputs:
+      ssh:
+        description: 'SSH connection to Actions'
+        required: true
+        default: 'true'
+#   push:
+#     branches:
+#       - main
+#     paths:
+#       - 'script.sh'
+#       - 'config.sh'
+#   schedule:
+#     - cron: 0 8 * * 0
+
+env:
+  REPO_URL: https://github.com/coolsnowwolf/lede
+  REPO_BRANCH: master
+  CONFIG_FILE: .config
+  SCRIPT_SH: script.sh
+  CONFIG_SH: config.test.sh
+  UPLOAD_FIRMWARE: true
+  TZ: Asia/Shanghai
+
+jobs:
+  build_openwrt:
+    name: Build OpenWrt and release
+    runs-on: ubuntu-18.04
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v2
+      with:
+        ref: main
+
+    - name: Initialization environment
+      env:
+        DEBIAN_FRONTEND: noninteractive
+      run: |
+        docker rmi `docker images -q`
+        sudo rm -rf /usr/share/dotnet /etc/mysql /etc/php /etc/apt/sources.list.d
+        sudo -E apt-get -y purge azure-cli ghc* zulu* hhvm llvm* firefox google* dotnet* powershell openjdk* mysql* php*
+        sudo -E apt-get update
+        sudo -E apt-get -y install build-essential asciidoc binutils bzip2 gawk gettext git libncurses5-dev libz-dev patch python3 python2.7 unzip zlib1g-dev lib32gcc1 libc6-dev-i386 subversion flex uglifyjs git-core gcc-multilib p7zip p7zip-full msmtp libssl-dev texinfo libglib2.0-dev xmlto qemu-utils upx libelf-dev autoconf automake libtool autopoint device-tree-compiler g++-multilib antlr3 gperf wget curl swig rsync
+        sudo -E apt-get -y autoremove --purge
+        sudo -E apt-get clean
+        sudo timedatectl set-timezone "$TZ"
+        df -h
+
+    - name: Clone source code
+      run: |
+        git clone --depth 1 $REPO_URL -b $REPO_BRANCH openwrt
+        cd openwrt
+        useVersionInfo=$(git show -s --date=short --format="date: %cd<br/>commit: %s<br/>commit hash: %H")
+        echo "useVersionInfo=$useVersionInfo" >> $GITHUB_ENV
+        echo "DATE=$(date "+%Y-%m-%d %H:%M:%S")" >> $GITHUB_ENV
+        echo "tag_name=$(date +%Y%m%d)" >> $GITHUB_ENV
+
+    # - name: Rttys update
+    #   run: |
+    #     cd openwrt/package
+    #     git clone --depth 1 https://github.com/zhaojh329/rtty  -b openwrt-package  openwrt-package
+
+    - name: Update feeds
+      run: |
+        [ -e files ] && mv files openwrt/files
+        chmod +x $SCRIPT_SH
+        ./$SCRIPT_SH
+        cd openwrt
+        sed -i 's/#src-git helloworld/src-git helloworld/g' ./feeds.conf.default
+        ./scripts/feeds update -a
+
+    - name: Install feeds
+      run: |
+        cd openwrt
+        ./scripts/feeds install -a
+
+    - name: Load custom configuration
+      run: |
+        chmod +x $CONFIG_SH
+        ./$CONFIG_SH
+
+    - name: SSH connection to Actions
+      uses: P3TERX/ssh2actions@v1.0.0
+      if: (github.event.inputs.ssh == 'true' && github.event.inputs.ssh  != 'false') || contains(github.event.action, 'ssh')
+      env:
+        TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+        
+    - name: Download package
+      run: |
+        cd openwrt
+        make defconfig
+        make download -j8
+        find dl -size -1024c -exec rm -f {} \;
+
+    - name: Compile the firmware
+      run: |
+        cd openwrt
+        echo -e "$(nproc) thread compile"
+        make -j$(nproc) || make -j1 V=s
+        echo "======================="
+        echo "Space usage:"
+        echo "======================="
+        df -h
+        echo "======================="
+        du -h --max-depth=1 ./ --exclude=build_dir --exclude=bin
+        du -h --max-depth=1 ./build_dir
+        du -h --max-depth=1 ./bin
+        echo "::set-output name=status::success"
+
+    - name: Organize files
+      id: organize
+      if: env.UPLOAD_FIRMWARE == 'true' && !cancelled()
+      run: |
+        cd openwrt/bin/
+        echo "################"
+        ls -al
+        du -sh *
+        echo "################"
+        echo "FIRMWARE=$PWD" >> $GITHUB_ENV
+        echo "::set-output name=status::success"
+
+    - name: Upload firmware directory
+      uses: actions/upload-artifact@main
+      if: steps.organize.outputs.status == 'success' && !cancelled()
+      with:
+        name: OpenWrt_firmware
+        path: ${{ env.FIRMWARE }}
+
+    - name: Create release
+      uses: ncipollo/release-action@v1
+      with:
+        name: ${{ env.DATE }} ❤️ | N1-OpenWrt 自动编译
+        allowUpdates: true
+        tag: ${{ env.tag_name }}
+        commit: main
+        token: ${{ secrets.GITHUB_TOKEN }}
+        body: |
+          编译使用版本:
+          ${{ env.useVersionInfo }}
+        artifacts: "${{ env.FIRMWARE }}/*"
+
+    - name: Delete workflow runs
+      uses: GitRML/delete-workflow-runs@main
+      with:
+        retain_days: 1
+        keep_minimum_runs: 3
+
+
+    - name: Remove old Releases
+      uses: dev-drprasad/delete-older-releases@v0.1.0
+      if: env.UPLOAD_RELEASE == 'true' && !cancelled()
+      with:
+        keep_latest: 3
+        delete_tags: true
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      
